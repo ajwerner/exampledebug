@@ -12,7 +12,7 @@ import (
 	"syscall"
 )
 
-var re = regexp.MustCompile("(?s).*\n--- FAIL: (\\w+).*\ngot:\n(.*?)\nwant:\n(.*?)\nFAIL")
+var re = regexp.MustCompile("(?s).*?--- FAIL: (\\w+).*?\ngot:\n(.*?)\nwant:\n(.*?)\n(--- FAIL|FAIL)")
 
 func main() {
 	input, err := ioutil.ReadAll(os.Stdin)
@@ -23,13 +23,13 @@ func main() {
 			return
 		}
 		//fmt.Printf("%q\n%q\n%q\n", string(submatches[1]), string(submatches[2]), string(submatches[3]))
-		test := submatches[1]
+		test := string(submatches[1])
 		got := submatches[2]
 		want := submatches[3]
-		diff, err := computeDiff(got, want)
-		exitIfError(err, fmt.Sprintf("failed to compute diff for test %s", string(test)))
-		fmt.Printf("%s:\n%s\n---\n", string(test), string(diff))
-		input = input[len(submatches[0]):]
+		diff, err := computeDiff("got", "want", got, want)
+		exitIfError(err, fmt.Sprintf("failed to compute diff for test %s", test))
+		fmt.Printf("%s:\n%s\n---\n", test, string(diff))
+		input = input[len(submatches[0])-len(submatches[4]):]
 	}
 }
 
@@ -41,14 +41,14 @@ func exitIfError(err error, message string) {
 	os.Exit(1)
 }
 
-func computeDiff(a, b []byte) ([]byte, error) {
+func computeDiff(labelA, labelB string, a, b []byte) ([]byte, error) {
 	aFile, err := makeTempFile("a", a)
 	exitIfError(err, "failed to create temp file")
 	defer os.Remove(aFile)
 	bFile, err := makeTempFile("b", b)
 	exitIfError(err, "failed to create temp file")
 	defer os.Remove(bFile)
-	cmd := exec.Command("diff", "-u", aFile, bFile)
+	cmd := exec.Command("diff", "-u", "--label", labelA, "--label", labelB, aFile, bFile)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout

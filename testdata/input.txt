@@ -1,0 +1,264 @@
+F190430 19:34:49.646736 15 storage/closedts/minprop/tracker.go:219  command released 2 times, this time with arguments (4, 10)
+stack trace omitted via SetExitFunc)
+--- FAIL: Example (0.00s)
+got:
+The newly initialized tracker has a zero closed timestamp:
+
+  closed=0.000000000,0
+      |            next=0.000000000,1
+      |          left | right
+      |             0 # 0
+      v               v
+---------------------------------------------------------> time
+
+A first command arrives on range 12 (though the range isn't known yet to the Tracker).
+All commands initially start out on the right. The command has its timestamp forwarded to 0.000000000,2 .
+
+  closed=0.000000000,0
+      |            next=0.000000000,1
+      |          left | right
+      |             0 # 1
+      v               v
+---------------------------------------------------------> time
+
+Two more commands arrive, on r1 and r12.
+
+  closed=0.000000000,0
+      |            next=0.000000000,1
+      |          left | right
+      |             0 # 3
+      v               v
+---------------------------------------------------------> time
+
+The command on r1 finishes evaluating at Lease Applied Index 10 and lets the Tracker know.
+
+  closed=0.000000000,0
+      |            next=0.000000000,1
+      |          left | right
+      |             0 # 2
+      |               @ 10     (r1)
+      v               v
+---------------------------------------------------------> time
+
+The command on r12 also finishes quickly, at LAI 77.
+
+  closed=0.000000000,0
+      |            next=0.000000000,1
+      |          left | right
+      |             0 # 1
+      |               @ 10     (r1)
+      |               @ 77     (r12)
+      v               v
+---------------------------------------------------------> time
+
+The system closes out a timestamp (registering 1000 as the next timestamp to close out).
+No problem: nothing is tracked on the left side; returns: 0.000000000,1 and map[]
+Note how the items on the right have moved to the left, as they are relevant for the
+next call to Close.
+
+  closed=0.000000000,1
+      |            next=1.000000000,0
+      |          left | right
+      |             1 # 0
+      |            10 @        (r1)
+      |            77 @        (r12)
+      v               v
+---------------------------------------------------------> time
+
+Nothing happens for a while until the system tries to close out the next timestamp.
+However, the very first proposal is still tracked and blocks progress.
+The call returns a no-op in the form 0.000000000,1 map[] .
+
+  closed=0.000000000,1
+      |            next=1.000000000,0
+      |          left | right
+      |             1 # 0
+      |            10 @        (r1)
+      |            77 @        (r12)
+      v               v
+---------------------------------------------------------> time
+
+A new command gets tracked on r12 (and is forwarded to 1.000000000,1 (if necessary).
+It terminates quickly, leaving an MLAI entry of 78 behind.
+
+  closed=0.000000000,1
+      |            next=1.000000000,0
+      |          left | right
+      |             1 # 0
+      |            10 @        (r1)
+      |            77 @        (r12)
+      |               @ 78     (r12)
+      v               v
+---------------------------------------------------------> time
+
+Finally! The slow evaluation finishes and the command gets proposed at index 79.
+Note that the right now tracks a smaller value of 78. Consumers have to keep the
+maximum they've seen.
+
+  closed=0.000000000,1
+      |            next=1.000000000,0
+      |          left | right
+      |             0 # 0
+      |            10 @        (r1)
+      |               @ 78     (r12)
+      |            79 @        (r12)
+      v               v
+---------------------------------------------------------> time
+
+The next call to Close() is successful and returns: 1.000000000,0 and map[1:10 12:79]
+
+  closed=1.000000000,0
+      |            next=3.000000000,0
+      |          left | right
+      |             0 # 0
+      |            78 @        (r12)
+      v               v
+---------------------------------------------------------> time
+want:
+The newly initialized tracker has a zero closed timestamp:
+
+  closed=0.000000000,0
+      |            next=0.000000000,1
+      |          left | right
+      |             0 # 0
+      v               v
+---------------------------------------------------------> time
+
+A first command arrives on range 12 (though the range isn't known yet to the Tracker).
+All commands initially start out on the right. The command has its timestamp forwarded to 0.000000000,2 .
+
+  closed=0.000000000,0
+      |            next=0.000000000,2
+      |          left | right
+      |             0 # 1
+      v               v
+---------------------------------------------------------> time
+
+Two more commands arrive, on r1 and r12.
+
+  closed=0.000000000,0
+      |            next=0.000000000,1
+      |          left | right
+      |             0 # 3
+      v               v
+---------------------------------------------------------> time
+
+The command on r1 finishes evaluating at Lease Applied Index 10 and lets the Tracker know.
+
+  closed=0.000000000,0
+      |            next=0.000000000,1
+      |          left | right
+      |             0 # 2
+      |               @ 10     (r1)
+      v               v
+---------------------------------------------------------> time
+
+The command on r12 also finishes quickly, at LAI 77.
+
+  closed=0.000000000,0
+      |            next=0.000000000,1
+      |          left | right
+      |             0 # 1
+      |               @ 10     (r1)
+      |               @ 77     (r12)
+      v               v
+---------------------------------------------------------> time
+
+The system closes out a timestamp (registering 1000 as the next timestamp to close out).
+No problem: nothing is tracked on the left side; returns: 0.000000000,1 and map[]
+Note how the items on the right have moved to the left, as they are relevant for the
+next call to Close.
+
+  closed=0.000000000,1
+      |            next=1.000000000,0
+      |          left | right
+      |             1 # 0
+      |            10 @        (r1)
+      |            77 @        (r12)
+      v               v
+---------------------------------------------------------> time
+
+Nothing happens for a while until the system tries to close out the next timestamp.
+However, the very first proposal is still tracked and blocks progress.
+The call returns a no-op in the form 0.000000000,1 map[] .
+
+  closed=0.000000000,1
+      |            next=1.000000000,0
+      |          left | right
+      |             1 # 0
+      |            10 @        (r1)
+      |            77 @        (r12)
+      v               v
+---------------------------------------------------------> time
+
+A new command gets tracked on r12 (and is forwarded to 1.000000000,1 (if necessary).
+It terminates quickly, leaving an MLAI entry of 78 behind.
+
+  closed=0.000000000,1
+      |            next=1.000000000,0
+      |          left | right
+      |             1 # 0
+      |            10 @        (r1)
+      |            77 @        (r12)
+      |               @ 78     (r12)
+      v               v
+---------------------------------------------------------> time
+
+Finally! The slow evaluation finishes and the command gets proposed at index 79.
+Note that the right now tracks a smaller value of 78. Consumers have to keep the
+maximum they've seen.
+
+  closed=0.000000000,1
+      |            next=1.000000000,0
+      |          left | right
+      |             0 # 0
+      |            10 @        (r1)
+      |               @ 78     (r12)
+      |            79 @        (r12)
+      v               v
+---------------------------------------------------------> time
+
+The next call to Close() is successful and returns: 1.000000000,0 and map[1:10 12:79]
+
+  closed=1.000000000,0
+      |            next=3.000000000,0
+      |          left | right
+      |             0 # 0
+      |            78 @        (r12)
+      v               v
+---------------------------------------------------------> time
+--- FAIL: ExampleTracker_Close (0.00s)
+got:
+Slow proposal finishes at LAI 2
+Closed: 1.000000000,0 map[99:2]
+Fast proposal finishes at LAI 1
+
+  closed=1.000000000,0
+      |            next=2.000000000,0
+      |          left | right
+      |             0 # 0
+      |             1 @        (r99)
+      v               v
+---------------------------------------------------------> time
+
+Closed: 2.000000000,0 map[99:1]
+Note how the MLAI has 'regressed' from 2 to 1. The consumer
+needs to track the maximum over all deltas received.
+want:
+Slow proposal finishes at LAI 2
+Closed: 1.000000000,0 map[99:2]
+Fast proposal finishes at LAI 1
+
+  closed=1.000000000,0
+      |            next=2.000000000,0
+      |          left | right
+      |             0 # 0
+      |             1 @        (r99)
+      v               v
+---------------------------------------------------------> time
+
+Closed: 2.000000000,0 map[99:1]
+Note how the MLAI has 'regressed' from 2 to 1. The consumer
+needs to track the maximum over all deltas received
+FAIL
+FAIL	github.com/cockroachdb/cockroach/pkg/storage/closedts/minprop	0.023s
